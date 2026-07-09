@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>RPG - Mapa</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 40px; }
+        .posicao {
+            display: inline-block;
+            width: 60px; height: 60px;
+            border: 2px solid #333;
+            margin: 4px; line-height: 60px;
+        }
+        .heroi { background: #4a90d9; color: white; }
+        button { padding: 10px 20px; margin: 8px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Mapa do RPG</h1>
+    <div id="mapa"></div>
+    <div>
+        <button onclick="mover('tras')">◀ Trás</button>
+        <button onclick="mover('frente')">Frente ▶</button>
+    </div>
+
+    <script>
+        async function desenhar() {
+            const posicoes = await fetch('http://localhost:3000/posicoes').then(r => r.json());
+            const heroi = await fetch('http://localhost:3000/personagem').then(r => r.json());
+
+            const mapa = document.getElementById('mapa');
+            mapa.innerHTML = '';
+
+            for (const pos of posicoes) {
+                const div = document.createElement('div');
+                div.className = 'posicao';
+                if (pos.id_posicao === heroi.id_posicao) {
+                    div.className = 'posicao heroi';
+                    div.textContent = '🧙';
+                } else {
+                    div.textContent = pos.id_posicao;
+                }
+                mapa.appendChild(div);
+            }
+        }
+
+        async function mover(direcao) {
+            await fetch('http://localhost:3000/mover/' + direcao);
+            desenhar();
+        }
+
+        desenhar();
+    </script>
+</body>
+</html>
