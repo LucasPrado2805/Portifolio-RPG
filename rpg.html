@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>RPG - Mapa Hexagonal</title>
+    <link rel="stylesheet" href="rpg.css">
+</head>
+<body>
+    <h1>Mapa do RPG</h1>
+    <div id="mapa"></div>
+
+    <div id="controles">
+        <div>
+            <button onclick="mover('noroeste')">↖ NO</button>
+            <button onclick="mover('nordeste')">NE ↗</button>
+        </div>
+        <div>
+            <button onclick="mover('oeste')">◀ Oeste</button>
+            <button onclick="mover('leste')">Leste ▶</button>
+        </div>
+        <div>
+            <button onclick="mover('sudoeste')">↙ SO</button>
+            <button onclick="mover('sudeste')">SE ↘</button>
+        </div>
+    </div>
+
+    <script>
+        async function desenhar() {
+            const posicoes = await fetch('http://localhost:3000/posicoes').then(r => r.json());
+            const heroi = await fetch('http://localhost:3000/personagem').then(r => r.json());
+            const cidades = await fetch('http://localhost:3000/cidades').then(r => r.json());
+
+            const mapa = document.getElementById('mapa');
+            mapa.innerHTML = '';
+
+            const ys = posicoes.map(p => p.y);
+            const minY = Math.min(...ys), maxY = Math.max(...ys);
+
+            for (let y = minY; y <= maxY; y++) {
+                const linha = document.createElement('div');
+                linha.className = 'linha';
+                linha.style.marginLeft = (y * 26) + 'px';
+
+                const casasDaLinha = posicoes
+                    .filter(p => p.y === y)
+                    .sort((a, b) => a.x - b.x);
+
+                for (const pos of casasDaLinha) {
+                    const hex = document.createElement('div');
+                    hex.className = 'hex';
+
+                    const cidadeAqui = cidades.find(c => c.x === pos.x && c.y === pos.y);
+
+                    if (pos.x === heroi.x && pos.y === heroi.y) {
+                        hex.className = 'hex heroi';
+                        hex.textContent = '🧙';
+                    } else if (cidadeAqui) {
+                        hex.className = 'hex cidade';
+                        hex.textContent = '🏰';
+                    } else {
+                        hex.textContent = pos.x + ',' + pos.y;
+                    }
+                    linha.appendChild(hex);
+                }
+                mapa.appendChild(linha);
+            }
+        }
+
+        async function mover(direcao) {
+            await fetch('http://localhost:3000/mover/' + direcao);
+            desenhar();
+        }
+
+        desenhar();
+    </script>
+</body>
+</html>

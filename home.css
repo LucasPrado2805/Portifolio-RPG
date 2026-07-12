@@ -1,0 +1,28 @@
+body {
+    font-family: sans-serif;
+    background: #1a1a1a;
+    color: #eee;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+.home { text-align: center; }
+
+.home h1 { font-size: 48px; margin-bottom: 10px; }
+
+.home p { color: #aaa; margin-bottom: 30px; }
+
+.botao-jogar {
+    display: inline-block;
+    padding: 14px 40px;
+    background: #4a90d9;
+    color: #fff;
+    text-decoration: none;
+    font-size: 20px;
+    border-radius: 6px;
+}
+
+.botao-jogar:hover { background: #357abd; }
