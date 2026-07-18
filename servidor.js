@@ -29,7 +29,12 @@ const DIRECOES = {
 
 // devolve todas as casas do mapa
 app.get('/posicoes', async (req, res) => {
-    const resultado = await client.query('SELECT * FROM posicoes ORDER BY y, x');
+    const resultado = await client.query(`
+        SELECT posicoes.x, posicoes.y, biomas.cor, biomas.transponivel
+        FROM posicoes
+        LEFT JOIN biomas ON posicoes.bioma_id = biomas.id_bioma
+        ORDER BY posicoes.y, posicoes.x
+    `);
     res.json(resultado.rows);
 });
 
@@ -42,20 +47,68 @@ app.get('/cidades', async (req, res) => {
 // devolve o herói (x,y direto, sem JOIN)
 app.get('/personagem', async (req, res) => {
     const resultado = await client.query(
-        'SELECT nome, x, y FROM personagem WHERE id_personagem = 1'
+        'SELECT nome, x, y, saldo_mov_turno, movimento_max FROM personagem WHERE id_personagem = 1'
     );
     res.json(resultado.rows[0]);
 });
 
-// move o herói somando a direção escolhida no x,y dele
+// move o herói: checa terreno e saldo antes de andar
 app.get('/mover/:direcao', async (req, res) => {
     const dir = DIRECOES[req.params.direcao];
     if (!dir) {
         return res.status(400).json({ erro: 'direcao invalida' });
     }
+
+    // 1. onde o herói está e quanto saldo ele tem
+    const heroiRes = await client.query(
+        'SELECT x, y, saldo_mov_turno FROM personagem WHERE id_personagem = 1'
+    );
+    const heroi = heroiRes.rows[0];
+
+    // 2. pra qual casa ele quer ir
+    const destinoX = heroi.x + dir.dx;
+    const destinoY = heroi.y + dir.dy;
+
+    // 3. o que existe nessa casa (bioma dela: passa? quanto custa?)
+    const casaRes = await client.query(`
+        SELECT biomas.transponivel, biomas.custo_mov
+        FROM posicoes
+        LEFT JOIN biomas ON posicoes.bioma_id = biomas.id_bioma
+        WHERE posicoes.x = $1 AND posicoes.y = $2
+    `, [destinoX, destinoY]);
+
+    // não existe casa ali → fora do mapa, bloqueia
+    if (casaRes.rows.length === 0) {
+        return res.json({ ok: false, motivo: 'fora do mapa' });
+    }
+
+    const casa = casaRes.rows[0];
+
+    // terreno bloqueado (mar)
+    if (casa.transponivel === false) {
+        return res.json({ ok: false, motivo: 'intransponivel' });
+    }
+
+    const custo = casa.custo_mov ?? 1; // se vier vazio, assume 1
+
+    // saldo insuficiente → bloqueia (a regra que combinamos)
+    if (heroi.saldo_mov_turno < custo) {
+        return res.json({ ok: false, motivo: 'sem saldo' });
+    }
+
+    // 4. pode andar: move e desconta o custo do saldo
     await client.query(
-        'UPDATE personagem SET x = x + $1, y = y + $2 WHERE id_personagem = 1',
-        [dir.dx, dir.dy]
+        'UPDATE personagem SET x = $1, y = $2, saldo_mov_turno = saldo_mov_turno - $3 WHERE id_personagem = 1',
+        [destinoX, destinoY, custo]
+    );
+
+    res.json({ ok: true });
+});
+
+// passar o turno: reabastece o saldo de movimento pro máximo
+app.get('/passar-turno', async (req, res) => {
+    await client.query(
+        'UPDATE personagem SET saldo_mov_turno = movimento_max WHERE id_personagem = 1'
     );
     res.json({ ok: true });
 });

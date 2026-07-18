@@ -7,6 +7,7 @@
 </head>
 <body>
     <h1>Mapa do RPG</h1>
+    <div id="saldo"></div>
     <div id="mapa"></div>
 
     <div id="controles">
@@ -23,12 +24,17 @@
             <button onclick="mover('sudeste')">SE ↘</button>
         </div>
     </div>
+    <div>
+        <button onclick="passarTurno()">🔄 Passar Turno</button>
+    </div>
 
     <script>
         async function desenhar() {
             const posicoes = await fetch('http://localhost:3000/posicoes').then(r => r.json());
             const heroi = await fetch('http://localhost:3000/personagem').then(r => r.json());
             const cidades = await fetch('http://localhost:3000/cidades').then(r => r.json());
+            document.getElementById('saldo').textContent =
+            'Movimento: ' + heroi.saldo_mov_turno + ' / ' + heroi.movimento_max;
 
             const mapa = document.getElementById('mapa');
             mapa.innerHTML = '';
@@ -60,10 +66,15 @@
                     } else {
                         hex.textContent = pos.x + ',' + pos.y;
                     }
+                    hex.style.background = pos.cor;
                     linha.appendChild(hex);
                 }
                 mapa.appendChild(linha);
             }
+        }
+        async function passarTurno() {
+            await fetch('http://localhost:3000/passar-turno');
+            desenhar();
         }
 
         async function mover(direcao) {

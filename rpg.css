@@ -15,8 +15,8 @@ body { font-family: sans-serif; text-align: center; padding: 20px; background: #
     filter: drop-shadow(0 0 2px #f8f5f5) drop-shadow(0 0 2px #e8e2e2) drop-shadow(0 0 1px #000);
 }
 
-.heroi { background: #4a90d9; font-size: 22px; }
-.cidade { background: #b8860b; }
+.heroi { background: transparent; font-size: 18px; }
+.cidade { background: #b8860b; font-size: 22px; }
 
 button { padding: 10px 16px; margin: 4px; font-size: 15px; cursor: pointer; }
 #controles { margin-top: 20px; }
