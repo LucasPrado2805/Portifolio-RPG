@@ -34,12 +34,17 @@
                     <button class="btn-menu">Diário</button>
                 </div>
 
-                <div id="controles-mov">
+               <div id="controles-mov">
                     <button class="hexbtn" onclick="mover('noroeste')">NO</button>
+                    <span></span>
                     <button class="hexbtn" onclick="mover('nordeste')">NE</button>
+
                     <button class="hexbtn" onclick="mover('oeste')">O</button>
+                    <button class="hexbtn hex-acampar" onclick="acampar()">⛺</button>
                     <button class="hexbtn" onclick="mover('leste')">L</button>
+
                     <button class="hexbtn" onclick="mover('sudoeste')">SO</button>
+                    <span></span>
                     <button class="hexbtn" onclick="mover('sudeste')">SE</button>
                 </div>
 
@@ -88,7 +93,7 @@
             document.getElementById('combate-vida').textContent =
                 'Vida: ' + r.vidaMonstro + ' | (tirou ' + r.d20 + ' no d20)';
         }
-        
+
         async function desenhar() {
             const posicoes = await fetch('http://localhost:3000/posicoes').then(r => r.json());
             const heroi = await fetch('http://localhost:3000/personagem').then(r => r.json());
@@ -147,6 +152,16 @@
         }
 
         desenhar();
+
+        async function acampar() {
+            const r = await fetch('http://localhost:3000/acampar').then(r => r.json());
+            if (!r.ok) {
+                alert('Não dá pra acampar: ' + r.motivo);
+                return;
+            }
+            desenhar();
+            alert('⛺ Acampamento montado! Passe o turno para se curar.');
+        }
 
         
     </script>

@@ -135,20 +135,45 @@ app.get('/mover/:direcao', async (req, res) => {
     }
 
     // 4. pode andar: move e desconta o custo do saldo
-    await client.query(
-        'UPDATE personagem SET x = $1, y = $2, saldo_mov_turno = saldo_mov_turno - $3 WHERE id_personagem = 1',
+   await client.query(
+        'UPDATE personagem SET x = $1, y = $2, saldo_mov_turno = saldo_mov_turno - $3, andou_no_turno = true, acampado = false WHERE id_personagem = 1',
         [destinoX, destinoY, custo]
     );
 
     res.json({ ok: true });
 });
 
-// passar o turno: reabastece o saldo de movimento pro máximo
 app.get('/passar-turno', async (req, res) => {
+    // estado atual do herói
+    const heroi = (await client.query(
+        'SELECT x, y, acampado, andou_no_turno FROM personagem WHERE id_personagem = 1'
+    )).rows[0];
+
+    let cura = 0;
+
+    if (heroi.acampado) {
+        // está numa cidade?
+        const cidade = (await client.query(
+            'SELECT 1 FROM cidades WHERE x = $1 AND y = $2',
+            [heroi.x, heroi.y]
+        )).rows[0];
+
+        if (cidade) {
+            cura = 20;                        // cidade: sempre 20
+        } else if (heroi.andou_no_turno) {
+            cura = 5;                         // bioma, andou: 5
+        } else {
+            cura = 10;                        // bioma, parado: 10
+        }
+    }
+
+    // aplica cura, reabastece o movimento e zera o flag "andou"
     await client.query(
-        'UPDATE personagem SET saldo_mov_turno = movimento_max WHERE id_personagem = 1'
+        'UPDATE personagem SET vida = vida + $1, saldo_mov_turno = movimento_max, andou_no_turno = false WHERE id_personagem = 1',
+        [cura]
     );
-    res.json({ ok: true });
+
+    res.json({ ok: true, cura });
 });
 
 // gera o mapa: cria largura x altura casas centradas em (0,0)
@@ -213,6 +238,30 @@ app.get('/atacar', async (req, res) => {
         vidaMonstro: combateAtual.vidaMonstro,
         vidaHeroi: heroi.vida
     });
+});
+
+app.get('/acampar', async (req, res) => {
+    // pega o saldo e o estado atual
+    const heroi = (await client.query(
+        'SELECT saldo_mov_turno, acampado FROM personagem WHERE id_personagem = 1'
+    )).rows[0];
+
+    // já acampado? não deixa acampar de novo
+    if (heroi.acampado) {
+        return res.json({ ok: false, motivo: 'ja acampado' });
+    }
+
+    // sem saldo pra pagar o custo 1? bloqueia
+    if (heroi.saldo_mov_turno < 1) {
+        return res.json({ ok: false, motivo: 'sem saldo' });
+    }
+
+    // paga 1 de movimento e liga o acampamento
+    await client.query(
+        'UPDATE personagem SET saldo_mov_turno = saldo_mov_turno - 1, acampado = true WHERE id_personagem = 1'
+    );
+
+    res.json({ ok: true });
 });
 
 app.listen(3000, () => {

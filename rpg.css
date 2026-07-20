@@ -77,9 +77,12 @@ body { font-family: sans-serif; text-align: center; padding: 20px; background: #
 /* os 6 botões de direção, em hexágono, dispostos em 2 colunas x 3 linhas */
 #controles-mov {
     display: grid;
-    grid-template-columns: repeat(2, auto);
+    grid-template-columns: repeat(3, auto);
     gap: 4px;
+    justify-items: center;
+    align-items: center;
 }
+.hex-acampar { background: #3b6ea5; color: #fff; }
 
 .hexbtn {
     width: 50px;
