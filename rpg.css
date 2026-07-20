@@ -18,5 +18,100 @@ body { font-family: sans-serif; text-align: center; padding: 20px; background: #
 .heroi { background: transparent; font-size: 18px; }
 .cidade { background: #b8860b; font-size: 22px; }
 
-button { padding: 10px 16px; margin: 4px; font-size: 15px; cursor: pointer; }
-#controles { margin-top: 20px; }
+/* ==== HUD do personagem (canto inferior esquerdo) ==== */
+
+#hud {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    text-align: left;
+}
+
+/* o círculo do personagem (foto vem depois; por enquanto só o círculo) */
+#foto-personagem {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: #3b6ea5;
+    border: 3px solid #888;
+    flex-shrink: 0;
+}
+
+/* a caixa que agrupa status + controles */
+#doca {
+    background: #2b2b2b;
+    border: 2px solid #666;
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* linha de cima: nome, vida, dinheiro, nível, movimento */
+#status { display: flex; gap: 6px; }
+
+.stat {
+    background: #3a3a3a;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* linha de baixo: menu | botões de movimento | próximo turno */
+#doca-baixo { display: flex; gap: 12px; align-items: center; }
+
+#menu { display: flex; flex-direction: column; gap: 6px; }
+
+.btn-menu {
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+/* os 6 botões de direção, em hexágono, dispostos em 2 colunas x 3 linhas */
+#controles-mov {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 4px;
+}
+
+.hexbtn {
+    width: 50px;
+    height: 56px;
+    border: none;
+    background: #c9a227;
+    color: #000;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    margin: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+#btn-turno {
+    width: 60px;
+    height: 120px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: normal;
+}
+#painel-combate {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    background: #3a2b2b;
+    border: 2px solid #8a5a5a;
+    border-radius: 12px;
+    padding: 12px 20px;
+    color: #eee;
+    text-align: center;
+    min-width: 160px;
+}
+#painel-combate h2 { margin: 0 0 8px 0; font-size: 18px; }
+#painel-combate p { margin: 0 0 10px 0; font-size: 14px; }

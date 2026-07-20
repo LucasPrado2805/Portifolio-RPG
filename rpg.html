@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <title>RPG - Mapa Hexagonal</title>
@@ -7,35 +7,98 @@
 </head>
 <body>
     <h1>Mapa do RPG</h1>
-    <div id="saldo"></div>
     <div id="mapa"></div>
 
-    <div id="controles">
-        <div>
-            <button onclick="mover('noroeste')">↖ NO</button>
-            <button onclick="mover('nordeste')">NE ↗</button>
-        </div>
-        <div>
-            <button onclick="mover('oeste')">◀ Oeste</button>
-            <button onclick="mover('leste')">Leste ▶</button>
-        </div>
-        <div>
-            <button onclick="mover('sudoeste')">↙ SO</button>
-            <button onclick="mover('sudeste')">SE ↘</button>
-        </div>
+    <div id="hud">
+        <div id="foto-personagem"></div>
+        <button id="btn-sacar" onclick="sacarCarta()">Sacar carta</button>
+
+    <div id="painel-combate" style="display:none;">
+        <h2 id="combate-nome"></h2>
+        <p id="combate-vida"></p>
+        <button onclick="atacar()">⚔️ Atacar</button>
     </div>
-    <div>
-        <button onclick="passarTurno()">🔄 Passar Turno</button>
+
+        <div id="doca">
+            <div id="status">
+                <div class="stat" id="nome">Herói</div>
+                <div class="stat" id="vida">Vida: —</div>
+                <div class="stat" id="dinheiro">Ouro: —</div>
+                <div class="stat" id="nivel">Nível: —</div>
+                <div class="stat" id="saldo">Movimento: —</div>
+            </div>
+
+            <div id="doca-baixo">
+                <div id="menu">
+                    <button class="btn-menu">Inventário</button>
+                    <button class="btn-menu">Diário</button>
+                </div>
+
+                <div id="controles-mov">
+                    <button class="hexbtn" onclick="mover('noroeste')">NO</button>
+                    <button class="hexbtn" onclick="mover('nordeste')">NE</button>
+                    <button class="hexbtn" onclick="mover('oeste')">O</button>
+                    <button class="hexbtn" onclick="mover('leste')">L</button>
+                    <button class="hexbtn" onclick="mover('sudoeste')">SO</button>
+                    <button class="hexbtn" onclick="mover('sudeste')">SE</button>
+                </div>
+
+                <button id="btn-turno" onclick="passarTurno()">Próximo turno</button>
+            </div>
+        </div>
     </div>
 
     <script>
+
+        async function sacarCarta() {
+            const carta = await fetch('http://localhost:3000/sacar-carta').then(r => r.json());
+            const painel = document.getElementById('painel-combate');
+
+            if (carta.vazia) {
+                painel.style.display = 'none';
+                alert('Carta vazia — nenhum combate.');
+                return;
+            }
+
+            document.getElementById('combate-nome').textContent = carta.nome;
+            document.getElementById('combate-vida').textContent =
+                'Vida: ' + carta.vidaMonstro + ' | Ataque: ' + carta.ataqueMonstro;
+            painel.style.display = 'block';
+        }
+
+       async function atacar() {
+            const r = await fetch('http://localhost:3000/atacar').then(r => r.json());
+
+            if (r.erro) { alert(r.erro); return; }
+
+            desenhar(); // atualiza a vida do herói na doca
+
+            if (r.fim === 'vitoria') {
+                alert('🎲 ' + r.d20 + '! Você derrotou ' + r.nome + '!');
+                document.getElementById('painel-combate').style.display = 'none';
+                return;
+            }
+            if (r.fim === 'derrota') {
+                alert('🎲 ' + r.d20 + '... Você foi derrotado!');
+                document.getElementById('painel-combate').style.display = 'none';
+                return;
+            }
+
+            // luta continua: atualiza os números no painel
+            document.getElementById('combate-vida').textContent =
+                'Vida: ' + r.vidaMonstro + ' | (tirou ' + r.d20 + ' no d20)';
+        }
+        
         async function desenhar() {
             const posicoes = await fetch('http://localhost:3000/posicoes').then(r => r.json());
             const heroi = await fetch('http://localhost:3000/personagem').then(r => r.json());
             const cidades = await fetch('http://localhost:3000/cidades').then(r => r.json());
-            document.getElementById('saldo').textContent =
-            'Movimento: ' + heroi.saldo_mov_turno + ' / ' + heroi.movimento_max;
 
+            document.getElementById('saldo').textContent =
+                'Movimento: ' + heroi.saldo_mov_turno + ' / ' + heroi.movimento_max;
+            document.getElementById('vida').textContent =
+                'Vida: ' + heroi.vida;
+                
             const mapa = document.getElementById('mapa');
             mapa.innerHTML = '';
 
@@ -72,17 +135,20 @@
                 mapa.appendChild(linha);
             }
         }
-        async function passarTurno() {
-            await fetch('http://localhost:3000/passar-turno');
-            desenhar();
-        }
 
         async function mover(direcao) {
             await fetch('http://localhost:3000/mover/' + direcao);
             desenhar();
         }
 
+        async function passarTurno() {
+            await fetch('http://localhost:3000/passar-turno');
+            desenhar();
+        }
+
         desenhar();
+
+        
     </script>
 </body>
 </html>

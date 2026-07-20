@@ -16,6 +16,45 @@ const client = new Client({
 });
 
 client.connect();
+let combateAtual = null;
+
+app.get('/sacar-carta', async (req, res) => {
+    // 1. onde o herói está
+    const heroi = (await client.query(
+        'SELECT x, y FROM personagem WHERE id_personagem = 1'
+    )).rows[0];
+
+    // 2. qual o bioma daquela casa
+    const casa = (await client.query(
+        'SELECT bioma_id FROM posicoes WHERE x = $1 AND y = $2',
+        [heroi.x, heroi.y]
+    )).rows[0];
+
+    // 3. sorteia: 0 = vazia, senão uma criatura do bioma
+    const sorteio = Math.floor(Math.random() * 3); // 0, 1 ou 2
+
+    if (sorteio === 0) {
+        combateAtual = null;
+        return res.json({ vazia: true });
+    }
+
+    const criaturas = (await client.query(
+        'SELECT nome, vida, ataque FROM criaturas WHERE bioma_id = $1',
+        [casa.bioma_id]
+    )).rows;
+
+    // pega a criatura 0 ou 1 da lista (sorteio vale 1 ou 2 aqui)
+    const criatura = criaturas[sorteio - 1];
+
+    // guarda a CÓPIA na memória (vida que vai cair na luta)
+    combateAtual = {
+        nome: criatura.nome,
+        vidaMonstro: criatura.vida,
+        ataqueMonstro: criatura.ataque
+    };
+
+    res.json({ vazia: false, ...combateAtual });
+});
 
 // as 6 direções de um hexágono pointy-top, em (dx, dy) axial
 const DIRECOES = {
@@ -47,8 +86,7 @@ app.get('/cidades', async (req, res) => {
 // devolve o herói (x,y direto, sem JOIN)
 app.get('/personagem', async (req, res) => {
     const resultado = await client.query(
-        'SELECT nome, x, y, saldo_mov_turno, movimento_max FROM personagem WHERE id_personagem = 1'
-    );
+    'SELECT nome, x, y, saldo_mov_turno, movimento_max, vida FROM personagem WHERE id_personagem = 1'    );
     res.json(resultado.rows[0]);
 });
 
@@ -132,6 +170,49 @@ app.get('/gerar-mapa/:largura/:altura', async (req, res) => {
     }
 
     res.json({ ok: true, casas_criadas: largura * altura });
+});
+
+app.get('/atacar', async (req, res) => {
+    // não tem luta rolando? erro
+    if (!combateAtual) {
+        return res.json({ erro: 'nenhum combate ativo' });
+    }
+
+    // 1. herói ataca: rola d20 e tira da vida da criatura (memória)
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    combateAtual.vidaMonstro -= d20;
+
+    // 2. criatura morreu? vitória (e ela NÃO revida)
+    if (combateAtual.vidaMonstro <= 0) {
+        const nome = combateAtual.nome;
+        combateAtual = null; // descarta a cópia da memória
+        return res.json({ d20, fim: 'vitoria', nome });
+    }
+
+    // 3. criatura viva: ela revida na vida do herói (banco)
+    await client.query(
+        'UPDATE personagem SET vida = vida - $1 WHERE id_personagem = 1',
+        [combateAtual.ataqueMonstro]
+    );
+
+    // 4. pega a vida atualizada do herói pra checar morte
+    const heroi = (await client.query(
+        'SELECT vida FROM personagem WHERE id_personagem = 1'
+    )).rows[0];
+
+    // 5. herói morreu? derrota
+    if (heroi.vida <= 0) {
+        combateAtual = null;
+        return res.json({ d20, fim: 'derrota', vidaHeroi: heroi.vida });
+    }
+
+    // 6. ninguém morreu: devolve o estado pra continuar a luta
+    res.json({
+        d20,
+        fim: null,
+        vidaMonstro: combateAtual.vidaMonstro,
+        vidaHeroi: heroi.vida
+    });
 });
 
 app.listen(3000, () => {
