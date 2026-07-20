@@ -169,8 +169,7 @@ app.get('/passar-turno', async (req, res) => {
 
     // aplica cura, reabastece o movimento e zera o flag "andou"
     await client.query(
-        'UPDATE personagem SET vida = vida + $1, saldo_mov_turno = movimento_max, andou_no_turno = false WHERE id_personagem = 1',
-        [cura]
+'UPDATE personagem SET vida = LEAST(vida + $1, vida_max), saldo_mov_turno = movimento_max, andou_no_turno = false WHERE id_personagem = 1',        [cura]
     );
 
     res.json({ ok: true, cura });
