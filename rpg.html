@@ -11,7 +11,6 @@
 
     <div id="hud">
         <div id="foto-personagem"></div>
-        <button id="btn-sacar" onclick="sacarCarta()">Sacar carta</button>
 
     <div id="painel-combate" style="display:none;">
         <h2 id="combate-nome"></h2>
@@ -48,28 +47,12 @@
                     <button class="hexbtn" onclick="mover('sudeste')">SE</button>
                 </div>
 
-                <button id="btn-turno" onclick="passarTurno()">Próximo turno</button>
+                <button id="btn-turno" onclick="encerrar()">Encerrar turno</button>
             </div>
         </div>
     </div>
 
     <script>
-
-        async function sacarCarta() {
-            const carta = await fetch('http://localhost:3000/sacar-carta').then(r => r.json());
-            const painel = document.getElementById('painel-combate');
-
-            if (carta.vazia) {
-                painel.style.display = 'none';
-                alert('Carta vazia — nenhum combate.');
-                return;
-            }
-
-            document.getElementById('combate-nome').textContent = carta.nome;
-            document.getElementById('combate-vida').textContent =
-                'Vida: ' + carta.vidaMonstro + ' | Ataque: ' + carta.ataqueMonstro;
-            painel.style.display = 'block';
-        }
 
        async function atacar() {
             const r = await fetch('http://localhost:3000/atacar').then(r => r.json());
@@ -146,9 +129,27 @@
             desenhar();
         }
 
-        async function passarTurno() {
-            await fetch('http://localhost:3000/passar-turno');
+        async function encerrar() {
+            const r = await fetch('http://localhost:3000/encerrar').then(r => r.json());
+            if (!r.ok) {
+                alert('Não dá pra encerrar: ' + r.motivo);
+                return;
+            }
+            
             desenhar();
+
+            if (r.encontro) {
+                if (r.encontro.vazia) {
+                    alert('Nada aconteceu: ' + r.encontro.nome);
+                } else if (r.encontro.protegido) {
+                    alert(r.encontro.nome + ' rondou o acampamento, mas não atacou.');
+                } else {
+                    document.getElementById('combate-nome').textContent = r.encontro.nome;
+                    document.getElementById('combate-vida').textContent =
+                        'Vida: ' + r.encontro.vidaMonstro + ' | Ataque: ' + r.encontro.ataqueMonstro;
+                    document.getElementById('painel-combate').style.display = 'block';
+                }
+            }
         }
 
         desenhar();

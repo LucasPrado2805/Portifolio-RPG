@@ -1,8 +1,13 @@
+const estado = require('../estado');
 const express = require('express');
 const router = express.Router();
 const client = require('../database');
 
 router.get('/acampar', async (req, res) => {
+     if (estado.combateAtual) {
+        return res.json({ ok: false, motivo: 'em combate' });
+    }
+
     const heroi = (await client.query(
         'SELECT saldo_mov_turno, acampado FROM personagem WHERE id_personagem = 1'
     )).rows[0];

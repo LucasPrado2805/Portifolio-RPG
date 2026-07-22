@@ -1,3 +1,4 @@
+const estado = require('../estado');
 const express = require('express');
 const router = express.Router();
 const client = require('../database');
@@ -32,6 +33,10 @@ router.get('/mover/:direcao', async (req, res) => {
     const dir = DIRECOES[req.params.direcao];
     if (!dir) {
         return res.status(400).json({ erro: 'direcao invalida' });
+    }
+
+    if (estado.combateAtual) {
+        return res.json({ ok: false, motivo: 'em combate' });
     }
 
     // 1. onde o herói está e quanto saldo ele tem
@@ -80,36 +85,73 @@ router.get('/mover/:direcao', async (req, res) => {
     res.json({ ok: true });
 });
 
-router.get('/passar-turno', async (req, res) => {
-    // estado atual do herói
+router.get('/encerrar', async (req, res) => {
+    if (estado.combateAtual) {
+        return res.json({ ok: false, motivo: 'em combate' });
+    }
     const heroi = (await client.query(
         'SELECT x, y, acampado, andou_no_turno FROM personagem WHERE id_personagem = 1'
     )).rows[0];
 
+    // 1. cura se acampado
     let cura = 0;
+    const cidade = (await client.query(
+        'SELECT 1 FROM cidades WHERE x = $1 AND y = $2',
+        [heroi.x, heroi.y]
+    )).rows[0];
 
     if (heroi.acampado) {
-        // está numa cidade?
-        const cidade = (await client.query(
-            'SELECT 1 FROM cidades WHERE x = $1 AND y = $2',
+        if (cidade) cura = 20;
+        else if (heroi.andou_no_turno) cura = 5;
+        else cura = 10;
+    }
+
+    // 2. carta: só fora de cidade
+    let encontro = null;
+
+    if (!cidade) {
+        const casa = (await client.query(
+            'SELECT bioma_id FROM posicoes WHERE x = $1 AND y = $2',
             [heroi.x, heroi.y]
         )).rows[0];
 
-        if (cidade) {
-            cura = 20;                        // cidade: sempre 20
-        } else if (heroi.andou_no_turno) {
-            cura = 5;                         // bioma, andou: 5
+const criaturas = (await client.query(
+            'SELECT nome, vida, ataque, agressividade FROM criaturas WHERE bioma_id = $1',
+            [casa.bioma_id]
+        )).rows;
+
+        // sorteia qualquer carta do baralho do bioma
+        const c = criaturas[Math.floor(Math.random() * criaturas.length)];
+
+        const protegido = heroi.acampado &&
+            (c.agressividade === 'domavel' || c.agressividade === 'territorialista');
+
+        if (c.vida === 0) {
+            encontro = { nome: c.nome, vazia: true };
+        } else if (!protegido) {
+            estado.combateAtual = {
+                nome: c.nome,
+                vidaMonstro: c.vida,
+                ataqueMonstro: c.ataque
+            };
+            encontro = { ...estado.combateAtual, agressividade: c.agressividade };
         } else {
-            cura = 10;                        // bioma, parado: 10
+            encontro = { nome: c.nome, protegido: true };
         }
     }
 
-    // aplica cura, reabastece o movimento e zera o flag "andou"
+    // 3. d6 + turno
+    const d6 = Math.floor(Math.random() * 6) + 1;
+
     await client.query(
-    'UPDATE personagem SET vida = LEAST(vida + $1, vida_max), saldo_mov_turno = movimento_max, andou_no_turno = false WHERE id_personagem = 1',        [cura]
+        `UPDATE personagem SET vida = LEAST(vida + $1, vida_max),
+         saldo_mov_turno = $2, movimento_max = $2,
+         andou_no_turno = false, turno_atual = turno_atual + 1
+         WHERE id_personagem = 1`,
+        [cura, d6]
     );
 
-    res.json({ ok: true, cura });
+    res.json({ ok: true, cura, d6, encontro });
 });
 
 router.get('/gerar-mapa/:largura/:altura', async (req, res) => {
