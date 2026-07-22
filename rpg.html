@@ -25,6 +25,7 @@
                 <div class="stat" id="dinheiro">Ouro: —</div>
                 <div class="stat" id="nivel">Nível: —</div>
                 <div class="stat" id="saldo">Movimento: —</div>
+                <div class="stat" id="turno">Turno: —</div>
             </div>
 
             <div id="doca-baixo">
@@ -84,8 +85,10 @@
 
             document.getElementById('saldo').textContent =
                 'Movimento: ' + heroi.saldo_mov_turno + ' / ' + heroi.movimento_max;
+            document.getElementById('turno').textContent =
+                'Turno: ' + heroi.turno_atual;
             document.getElementById('vida').textContent =
-                'Vida: ' + heroi.vida;
+                'Vida: ' + heroi.vida + ' / ' + heroi.vida_max;
                 
             const mapa = document.getElementById('mapa');
             mapa.innerHTML = '';
@@ -152,8 +155,6 @@
             }
         }
 
-        desenhar();
-
         async function acampar() {
             const r = await fetch('http://localhost:3000/acampar').then(r => r.json());
             if (!r.ok) {
@@ -163,8 +164,8 @@
             desenhar();
             alert('⛺ Acampamento montado! Passe o turno para se curar.');
         }
+        desenhar();
 
-        
     </script>
 </body>
 </html>

@@ -120,23 +120,25 @@ const criaturas = (await client.query(
             [casa.bioma_id]
         )).rows;
 
-        // sorteia qualquer carta do baralho do bioma
-        const c = criaturas[Math.floor(Math.random() * criaturas.length)];
+        if (criaturas.length > 0) {
+            // sorteia qualquer carta do baralho do bioma
+            const c = criaturas[Math.floor(Math.random() * criaturas.length)];
 
-        const protegido = heroi.acampado &&
-            (c.agressividade === 'domavel' || c.agressividade === 'territorialista');
+            const protegido = heroi.acampado &&
+                (c.agressividade === 'domavel' || c.agressividade === 'territorialista');
 
-        if (c.vida === 0) {
-            encontro = { nome: c.nome, vazia: true };
-        } else if (!protegido) {
-            estado.combateAtual = {
-                nome: c.nome,
-                vidaMonstro: c.vida,
-                ataqueMonstro: c.ataque
-            };
-            encontro = { ...estado.combateAtual, agressividade: c.agressividade };
-        } else {
-            encontro = { nome: c.nome, protegido: true };
+            if (c.vida === 0) {
+                encontro = { nome: c.nome, vazia: true };
+            } else if (!protegido) {
+                estado.combateAtual = {
+                    nome: c.nome,
+                    vidaMonstro: c.vida,
+                    ataqueMonstro: c.ataque
+                };
+                encontro = { ...estado.combateAtual, agressividade: c.agressividade };
+            } else {
+                encontro = { nome: c.nome, protegido: true };
+            }
         }
     }
 
