@@ -6,17 +6,18 @@
     <link rel="stylesheet" href="rpg.css">
 </head>
 <body>
+
     <h1>Mapa do RPG</h1>
     <div id="mapa"></div>
 
     <div id="hud">
         <div id="foto-personagem"></div>
 
-    <div id="painel-combate" style="display:none;">
-        <h2 id="combate-nome"></h2>
-        <p id="combate-vida"></p>
-        <button onclick="atacar()">⚔️ Atacar</button>
-    </div>
+        <div id="painel-combate" style="display:none;">
+            <h2 id="combate-nome"></h2>
+            <p id="combate-vida"></p>
+            <button onclick="atacar()">⚔️ Atacar</button>
+        </div>
 
         <div id="doca">
             <div id="status">
@@ -32,9 +33,10 @@
                 <div id="menu">
                     <button class="btn-menu">Inventário</button>
                     <button class="btn-menu">Diário</button>
+                    <button class="btn-menu" onclick="verMissao()">Missão</button>
                 </div>
 
-               <div id="controles-mov">
+                <div id="controles-mov">
                     <button class="hexbtn" onclick="mover('noroeste')">NO</button>
                     <span></span>
                     <button class="hexbtn" onclick="mover('nordeste')">NE</button>
@@ -55,16 +57,24 @@
 
     <script>
 
-       async function atacar() {
+        async function atacar() {
             const r = await fetch('http://localhost:3000/atacar').then(r => r.json());
 
             if (r.erro) { alert(r.erro); return; }
 
-            desenhar(); // atualiza a vida do herói na doca
+            desenhar();
 
             if (r.fim === 'vitoria') {
                 alert('🎲 ' + r.d20 + '! Você derrotou ' + r.nome + '!');
                 document.getElementById('painel-combate').style.display = 'none';
+                if (r.missao) {
+                    if (r.missao.estado === 'concluida')
+                        alert('✅ Missão concluída! +' + r.missao.recompensa + ' ouro');
+                    else if (r.missao.estado === 'avancou')
+                        alert('Objetivo cumprido! Próximo passo.');
+                }
+                if (r.combate) abrirCombate(r.combate);
+                desenhar();
                 return;
             }
             if (r.fim === 'derrota') {
@@ -73,9 +83,47 @@
                 return;
             }
 
-            // luta continua: atualiza os números no painel
             document.getElementById('combate-vida').textContent =
                 'Vida: ' + r.vidaMonstro + ' | (tirou ' + r.d20 + ' no d20)';
+        }
+
+        async function verMissao() {
+            const r = await fetch('http://localhost:3000/ver-missao').then(r => r.json());
+            if (!r.ok) { alert('Não dá: ' + r.motivo); return; }
+            desenhar();
+            if (!r.missao) { alert('🎲 ' + r.d4 + ' — nenhuma missão dessa vez.'); return; }
+
+            const aceita = confirm('🎲 ' + r.d4 + '\n\n' + r.missao.texto +
+                '\n\nRecompensa: ' + r.missao.recompensa + ' ouro\n\nAceitar?');
+            if (aceita) {
+                const resp = await fetch('http://localhost:3000/aceitar-missao/' + r.missao.id_missao).then(r => r.json());
+                if (resp.combate) {
+                    abrirCombate(resp.combate);
+                } else {
+                    alert('Missão aceita!');
+                }
+                desenhar();
+            }
+        }
+
+        async function verificarMissoes() {
+            const r = await fetch('http://localhost:3000/verificar-missoes').then(r => r.json());
+            for (const res of r.resultados) {
+                if (res.estado === 'concluida')
+                    alert('✅ Missão concluída! +' + res.recompensa + ' ouro');
+                else if (res.estado === 'avancou')
+                    alert('Objetivo cumprido! Próximo passo.');
+                if (res.combate) abrirCombate(res.combate);
+            }
+            desenhar();
+        }
+
+        function abrirCombate(monstro) {
+            document.getElementById('combate-nome').textContent = monstro.nome;
+            document.getElementById('combate-vida').textContent =
+                'Vida: ' + monstro.vidaMonstro +
+                (monstro.ataqueMonstro !== undefined ? ' | Ataque: ' + monstro.ataqueMonstro : '');
+            document.getElementById('painel-combate').style.display = 'block';
         }
 
         async function desenhar() {
@@ -89,7 +137,9 @@
                 'Turno: ' + heroi.turno_atual;
             document.getElementById('vida').textContent =
                 'Vida: ' + heroi.vida + ' / ' + heroi.vida_max;
-                
+            document.getElementById('dinheiro').textContent =
+                'Ouro: ' + heroi.dinheiro;
+
             const mapa = document.getElementById('mapa');
             mapa.innerHTML = '';
 
@@ -138,21 +188,29 @@
                 alert('Não dá pra encerrar: ' + r.motivo);
                 return;
             }
-            
+
             desenhar();
 
-            if (r.encontro) {
+            if (r.missao) {
+                if (r.missao.estado === 'concluida')
+                    alert('✅ Missão concluída! +' + r.missao.recompensa + ' ouro');
+                else if (r.missao.estado === 'avancou')
+                    alert('Objetivo cumprido! Próximo passo.');
+            }
+
+            if (r.combate) {
+                abrirCombate(r.combate);
+            } else if (r.encontro) {
                 if (r.encontro.vazia) {
                     alert('Nada aconteceu: ' + r.encontro.nome);
                 } else if (r.encontro.protegido) {
                     alert(r.encontro.nome + ' rondou o acampamento, mas não atacou.');
                 } else {
-                    document.getElementById('combate-nome').textContent = r.encontro.nome;
-                    document.getElementById('combate-vida').textContent =
-                        'Vida: ' + r.encontro.vidaMonstro + ' | Ataque: ' + r.encontro.ataqueMonstro;
-                    document.getElementById('painel-combate').style.display = 'block';
+                    abrirCombate(r.encontro);
                 }
             }
+
+            desenhar();
         }
 
         async function acampar() {
@@ -164,6 +222,7 @@
             desenhar();
             alert('⛺ Acampamento montado! Passe o turno para se curar.');
         }
+
         desenhar();
 
     </script>

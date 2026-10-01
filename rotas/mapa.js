@@ -2,6 +2,7 @@ const estado = require('../estado');
 const express = require('express');
 const router = express.Router();
 const client = require('../database');
+const { verificarIrAte, objetivoAtivoEhInvocar } = require('../missoes_logica');
 
 const DIRECOES = {
     leste:     { dx: 1,  dy: 0 },
@@ -39,17 +40,14 @@ router.get('/mover/:direcao', async (req, res) => {
         return res.json({ ok: false, motivo: 'em combate' });
     }
 
-    // 1. onde o herói está e quanto saldo ele tem
     const heroiRes = await client.query(
         'SELECT x, y, saldo_mov_turno FROM personagem WHERE id_personagem = 1'
     );
     const heroi = heroiRes.rows[0];
 
-    // 2. pra qual casa ele quer ir
     const destinoX = heroi.x + dir.dx;
     const destinoY = heroi.y + dir.dy;
 
-    // 3. o que existe nessa casa (bioma dela: passa? quanto custa?)
     const casaRes = await client.query(`
         SELECT biomas.transponivel, biomas.custo_mov
         FROM posicoes
@@ -57,27 +55,23 @@ router.get('/mover/:direcao', async (req, res) => {
         WHERE posicoes.x = $1 AND posicoes.y = $2
     `, [destinoX, destinoY]);
 
-    // não existe casa ali → fora do mapa, bloqueia
     if (casaRes.rows.length === 0) {
         return res.json({ ok: false, motivo: 'fora do mapa' });
     }
 
     const casa = casaRes.rows[0];
 
-    // terreno bloqueado (mar)
     if (casa.transponivel === false) {
         return res.json({ ok: false, motivo: 'intransponivel' });
     }
 
-    const custo = casa.custo_mov ?? 1; // se vier vazio, assume 1
+    const custo = casa.custo_mov ?? 1;
 
-    // saldo insuficiente → bloqueia (a regra que combinamos)
     if (heroi.saldo_mov_turno < custo) {
         return res.json({ ok: false, motivo: 'sem saldo' });
     }
 
-    // 4. pode andar: move e desconta o custo do saldo
-   await client.query(
+    await client.query(
         'UPDATE personagem SET x = $1, y = $2, saldo_mov_turno = saldo_mov_turno - $3, andou_no_turno = true, acampado = false WHERE id_personagem = 1',
         [destinoX, destinoY, custo]
     );
@@ -106,22 +100,25 @@ router.get('/encerrar', async (req, res) => {
         else cura = 10;
     }
 
-    // 2. carta: só fora de cidade
-    let encontro = null;
+    // 2. verifica missão primeiro (completa ir_ate, pode invocar boss)
+    const missao = await verificarIrAte();
 
-    if (!cidade) {
+    // 3. carta: só fora de cidade, sem combate ativo e sem invocar pendente
+    let encontro = null;
+    const ehInvocar = await objetivoAtivoEhInvocar();
+
+    if (!cidade && !estado.combateAtual && !ehInvocar) {
         const casa = (await client.query(
             'SELECT bioma_id FROM posicoes WHERE x = $1 AND y = $2',
             [heroi.x, heroi.y]
         )).rows[0];
 
-const criaturas = (await client.query(
-            'SELECT nome, vida, ataque, agressividade FROM criaturas WHERE bioma_id = $1',
+        const criaturas = (await client.query(
+            'SELECT id_criatura, nome, vida, ataque, agressividade FROM criaturas WHERE bioma_id = $1',
             [casa.bioma_id]
         )).rows;
 
         if (criaturas.length > 0) {
-            // sorteia qualquer carta do baralho do bioma
             const c = criaturas[Math.floor(Math.random() * criaturas.length)];
 
             const protegido = heroi.acampado &&
@@ -131,6 +128,7 @@ const criaturas = (await client.query(
                 encontro = { nome: c.nome, vazia: true };
             } else if (!protegido) {
                 estado.combateAtual = {
+                    id: c.id_criatura,
                     nome: c.nome,
                     vidaMonstro: c.vida,
                     ataqueMonstro: c.ataque
@@ -142,7 +140,7 @@ const criaturas = (await client.query(
         }
     }
 
-    // 3. d6 + turno
+    // 4. d6 + turno
     const d6 = Math.floor(Math.random() * 6) + 1;
 
     await client.query(
@@ -153,7 +151,7 @@ const criaturas = (await client.query(
         [cura, d6]
     );
 
-    res.json({ ok: true, cura, d6, encontro });
+    res.json({ ok: true, cura, d6, encontro, missao, combate: estado.combateAtual });
 });
 
 router.get('/gerar-mapa/:largura/:altura', async (req, res) => {

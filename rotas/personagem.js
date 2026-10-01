@@ -5,7 +5,7 @@ const client = require('../database');
 // devolve o herói
 router.get('/personagem', async (req, res) => {
     const resultado = await client.query(
-        'SELECT nome, x, y, saldo_mov_turno, movimento_max, vida, vida_max, turno_atual FROM personagem WHERE id_personagem = 1'    );
+        'SELECT nome, x, y, saldo_mov_turno, movimento_max, vida, vida_max, turno_atual, dinheiro  FROM personagem WHERE id_personagem = 1'    );
     res.json(resultado.rows[0]);
 });
 

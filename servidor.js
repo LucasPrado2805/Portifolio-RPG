@@ -13,6 +13,8 @@ app.use(require('./rotas/combate'));
 
 app.use(require('./rotas/acampamento'));
 
+app.use(require('./rotas/missoes'));
+
 app.listen(3000, () => {
     console.log('Servidor rodando em http://localhost:3000');
 });

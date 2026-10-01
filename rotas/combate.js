@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const client = require('../database');
 const estado = require('../estado');
+const { verificarCombate } = require('../missoes_logica');
 
 router.get('/atacar', async (req, res) => {
     if (!estado.combateAtual) {
@@ -13,8 +14,12 @@ router.get('/atacar', async (req, res) => {
 
     if (estado.combateAtual.vidaMonstro <= 0) {
         const nome = estado.combateAtual.nome;
+        const idMorto = estado.combateAtual.id;
         estado.combateAtual = null;
-        return res.json({ d20, fim: 'vitoria', nome });
+
+        const missao = await verificarCombate(idMorto);
+
+        return res.json({ d20, fim: 'vitoria', nome, missao, combate: estado.combateAtual });
     }
 
     await client.query(
