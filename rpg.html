@@ -33,7 +33,8 @@
                 <div id="menu">
                     <button class="btn-menu">Inventário</button>
                     <button class="btn-menu">Diário</button>
-                    <button class="btn-menu" onclick="verMissao()">Missão</button>
+                    <button class="btn-menu" id="btn-missao" onclick="verMissao()">Missão</button>
+                    <button class="btn-menu" id="btn-dado" onclick="rolarDado()">Rolar dado</button>
                 </div>
 
                 <div id="controles-mov">
@@ -87,21 +88,34 @@
                 'Vida: ' + r.vidaMonstro + ' | (tirou ' + r.d20 + ' no d20)';
         }
 
-        async function verMissao() {
+                async function verMissao() {
             const r = await fetch('http://localhost:3000/ver-missao').then(r => r.json());
             if (!r.ok) { alert('Não dá: ' + r.motivo); return; }
             desenhar();
             if (!r.missao) { alert('🎲 ' + r.d4 + ' — nenhuma missão dessa vez.'); return; }
 
+            // EVENTO: acontece sem perguntar
+            if (r.evento) {
+                const resp = await fetch('http://localhost:3000/aceitar-missao/' + r.missao.id_missao).then(r => r.json());
+                const perdeu = resp.missao ? resp.missao.pagou : 0;
+
+                let msg = '🎲 ' + r.d4 + '\n\n' + r.missao.texto + '\n\n';
+                if (perdeu > 0) msg += '💸 Você perdeu ' + perdeu + ' ouro.';
+                else msg += '💸 Você não tinha ouro para perder.';
+                alert(msg);
+
+                if (resp.combate) abrirCombate(resp.combate);
+                desenhar();
+                return;
+            }
+
+            // MISSÃO NORMAL: pergunta se quer aceitar
             const aceita = confirm('🎲 ' + r.d4 + '\n\n' + r.missao.texto +
                 '\n\nRecompensa: ' + r.missao.recompensa + ' ouro\n\nAceitar?');
             if (aceita) {
                 const resp = await fetch('http://localhost:3000/aceitar-missao/' + r.missao.id_missao).then(r => r.json());
-                if (resp.combate) {
-                    abrirCombate(resp.combate);
-                } else {
-                    alert('Missão aceita!');
-                }
+                alert('Missão aceita!');
+                if (resp.combate) abrirCombate(resp.combate);
                 desenhar();
             }
         }
@@ -130,6 +144,17 @@
             const posicoes = await fetch('http://localhost:3000/posicoes').then(r => r.json());
             const heroi = await fetch('http://localhost:3000/personagem').then(r => r.json());
             const cidades = await fetch('http://localhost:3000/cidades').then(r => r.json());
+
+            const ativo = await fetch('http://localhost:3000/objetivo-ativo').then(r => r.json());
+            const naCidade = cidades.some(c => c.x === heroi.x && c.y === heroi.y);
+
+            // Missão: precisa estar numa cidade, ter movimento e não estar em combate
+            document.getElementById('btn-missao').disabled =
+                ativo.emCombate || !naCidade || heroi.saldo_mov_turno < 1;
+
+            // Rolar dado: precisa de um objetivo de dados ativo e não estar em combate
+            document.getElementById('btn-dado').disabled =
+                ativo.emCombate || !ativo.objetivo || ativo.objetivo.tipo !== 'dados';
 
             document.getElementById('saldo').textContent =
                 'Movimento: ' + heroi.saldo_mov_turno + ' / ' + heroi.movimento_max;
@@ -178,7 +203,10 @@
         }
 
         async function mover(direcao) {
-            await fetch('http://localhost:3000/mover/' + direcao);
+            const r = await fetch('http://localhost:3000/mover/' + direcao).then(r => r.json());
+            if (r.missaoPerdida) {
+                alert('⏳ Você saiu do lugar enquanto esperava. Missão perdida.');
+            }
             desenhar();
         }
 
@@ -221,6 +249,26 @@
             }
             desenhar();
             alert('⛺ Acampamento montado! Passe o turno para se curar.');
+        }
+
+        async function rolarDado() {
+            const r = await fetch('http://localhost:3000/rolar-dado').then(r => r.json());
+            if (!r.ok) {
+                alert('Não dá pra rolar: ' + r.motivo);
+                return;
+            }
+
+            const regra = { fixo: 'exatamente', minimo: 'no mínimo', maximo: 'no máximo' }[r.modo];
+            let msg = '🎲 d' + r.dado + ': saiu ' + r.rolagem + ' (precisava ' + regra + ' ' + r.meta + ')';
+
+            if (!r.acertou) msg += '\nErrou. Role de novo.';
+            else if (r.missao.estado === 'concluida') msg += '\n✅ Missão concluída! +' + r.missao.recompensa + ' ouro';
+            else msg += '\nAcertou! Próximo objetivo.';
+
+            alert(msg);
+
+            if (r.combate) abrirCombate(r.combate);
+            desenhar();
         }
 
         desenhar();

@@ -2,9 +2,7 @@ const estado = require('../estado');
 const express = require('express');
 const router = express.Router();
 const client = require('../database');
-const { verificarIrAte, objetivoAtivoEhInvocar } = require('../missoes_logica');
-
-const DIRECOES = {
+const { verificarIrAte, objetivoAtivoEhInvocar, verificarEsperar, quebrarEsperar, verificarPerda } = require('../missoes_logica');const DIRECOES = {
     leste:     { dx: 1,  dy: 0 },
     oeste:     { dx: -1, dy: 0 },
     sudeste:   { dx: 0,  dy: 1 },
@@ -76,7 +74,10 @@ router.get('/mover/:direcao', async (req, res) => {
         [destinoX, destinoY, custo]
     );
 
-    res.json({ ok: true });
+    // se estava num objetivo de esperar, sair do lugar perde a missão
+    const missaoPerdida = await quebrarEsperar();
+
+    res.json({ ok: true, missaoPerdida });
 });
 
 router.get('/encerrar', async (req, res) => {
@@ -151,7 +152,13 @@ router.get('/encerrar', async (req, res) => {
         [cura, d6]
     );
 
-    res.json({ ok: true, cura, d6, encontro, missao, combate: estado.combateAtual });
+    // 5. esperar: confere DEPOIS do turno subir
+    const missaoEspera = await verificarEsperar();
+
+    // 6. perda: se faltou dinheiro antes, tenta cobrar de novo
+    const missaoPerda = await verificarPerda();
+
+    res.json({ ok: true, cura, d6, encontro, missao: missao || missaoEspera || missaoPerda, combate: estado.combateAtual });
 });
 
 router.get('/gerar-mapa/:largura/:altura', async (req, res) => {

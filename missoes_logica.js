@@ -12,10 +12,16 @@ async function avancar(idDinamico, idMissao, ordemAtual) {
 
     if (proximo) {
         await client.query(
-            'UPDATE obj_dinamico SET ordem_atual = $1, ultimo_num = 0 WHERE id_dinamico = $2',
+            'UPDATE obj_dinamico SET ordem_atual = $1, ultimo_num = 0, turno_meta = NULL WHERE id_dinamico = $2',
             [novaOrdem, idDinamico]
         );
         await invocarSeNecessario(idMissao, novaOrdem);
+        await prepararEsperar(idMissao, novaOrdem);
+
+        // se o próximo objetivo for perda e o herói puder pagar, cobra e já avança de novo
+        const pagou = await prepararPerda(idMissao, novaOrdem);
+        if (pagou) return pagou;
+
         return { estado: 'avancou', ordem: novaOrdem };
     } else {
         const recompensa = (await client.query(
@@ -56,6 +62,56 @@ async function invocarSeNecessario(idMissao, ordem) {
         vidaMonstro: base.vida + (obj.vida_mod || 0),
         ataqueMonstro: base.ataque + (obj.ataq_mod || 0)
     };
+}
+
+// ESPERAR (preparar) — se o objetivo desta ordem for esperar, grava o turno em que a espera termina
+async function prepararEsperar(idMissao, ordem) {
+    const obj = (await client.query(
+        'SELECT tipo, alvo FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
+        [idMissao, ordem]
+    )).rows[0];
+
+    if (!obj || obj.tipo !== 'esperar') return;
+
+    // turno_meta = turno de agora + quantos turnos esperar
+    await client.query(
+        `UPDATE obj_dinamico
+         SET turno_meta = (SELECT turno_atual FROM personagem WHERE id_personagem = 1) + $1
+         WHERE personagem_id = 1 AND missao_id = $2 AND status = 'ativa'`,
+        [obj.alvo, idMissao]
+    );
+}
+
+// PERDA (preparar) — evento: cobra o que o herói tiver, até zerar, e avança sempre
+async function prepararPerda(idMissao, ordem) {
+    const obj = (await client.query(
+        'SELECT tipo, alvo FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
+        [idMissao, ordem]
+    )).rows[0];
+
+    if (!obj || obj.tipo !== 'perda') return null;
+
+    const custo = -obj.alvo;   // alvo -50 → custo 50
+
+    const heroi = (await client.query(
+        'SELECT dinheiro FROM personagem WHERE id_personagem = 1'
+    )).rows[0];
+
+    const pagou = Math.min(heroi.dinheiro, custo);   // nunca tira mais do que o herói tem
+
+    await client.query(
+        'UPDATE personagem SET dinheiro = dinheiro - $1 WHERE id_personagem = 1',
+        [pagou]
+    );
+
+    const dinamico = (await client.query(
+        `SELECT id_dinamico FROM obj_dinamico
+         WHERE personagem_id = 1 AND missao_id = $1 AND status = 'ativa'`,
+        [idMissao]
+    )).rows[0];
+
+    const r = await avancar(dinamico.id_dinamico, idMissao, ordem);
+    return { ...r, pagou };
 }
 
 // VERIFICAR COMBATE — chamado quando uma criatura morre
@@ -110,6 +166,68 @@ async function verificarIrAte() {
     return null;
 }
 
+// VERIFICAR ESPERAR — chamado no encerrar; se o turno chegou na meta, avança
+async function verificarEsperar() {
+    const dinamico = (await client.query(
+        `SELECT id_dinamico, missao_id, ordem_atual, turno_meta FROM obj_dinamico
+         WHERE personagem_id = 1 AND status = 'ativa'`
+    )).rows[0];
+
+    if (!dinamico) return null;
+
+    const obj = (await client.query(
+        'SELECT tipo FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
+        [dinamico.missao_id, dinamico.ordem_atual]
+    )).rows[0];
+
+    if (!obj || obj.tipo !== 'esperar') return null;
+    if (dinamico.turno_meta === null) return null;   // meta não foi gravada; não avança
+
+    const heroi = (await client.query(
+        'SELECT turno_atual FROM personagem WHERE id_personagem = 1'
+    )).rows[0];
+
+    if (heroi.turno_atual >= dinamico.turno_meta) {
+        return await avancar(dinamico.id_dinamico, dinamico.missao_id, dinamico.ordem_atual);
+    }
+    return null;   // ainda não chegou, espera mais
+}
+
+// VERIFICAR PERDA — chamado no encerrar; se o objetivo ativo é perda, tenta cobrar de novo
+async function verificarPerda() {
+    const dinamico = (await client.query(
+        `SELECT missao_id, ordem_atual FROM obj_dinamico
+         WHERE personagem_id = 1 AND status = 'ativa'`
+    )).rows[0];
+
+    if (!dinamico) return null;
+
+    return await prepararPerda(dinamico.missao_id, dinamico.ordem_atual);
+}
+
+// QUEBRAR ESPERAR — chamado ao mover; se o objetivo ativo é esperar, o herói saiu do lugar e perde a missão
+async function quebrarEsperar() {
+    const dinamico = (await client.query(
+        `SELECT id_dinamico, missao_id, ordem_atual FROM obj_dinamico
+         WHERE personagem_id = 1 AND status = 'ativa'`
+    )).rows[0];
+
+    if (!dinamico) return false;
+
+    const obj = (await client.query(
+        'SELECT tipo FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
+        [dinamico.missao_id, dinamico.ordem_atual]
+    )).rows[0];
+
+    if (!obj || obj.tipo !== 'esperar') return false;   // não estava esperando, pode andar
+
+    await client.query(
+        `UPDATE obj_dinamico SET status = 'perdida' WHERE id_dinamico = $1`,
+        [dinamico.id_dinamico]
+    );
+    return true;   // estava esperando e se mexeu: missão perdida
+}
+
 // O objetivo ativo é um combate invocar? (pra silenciar a carta do bioma)
 async function objetivoAtivoEhInvocar() {
     const dinamico = (await client.query(
@@ -127,4 +245,35 @@ async function objetivoAtivoEhInvocar() {
     return obj && obj.tipo === 'combate' && obj.modo === 'invocar';
 }
 
-module.exports = { avancar, verificarCombate, invocarSeNecessario, verificarIrAte, objetivoAtivoEhInvocar };
+// VERIFICAR DADOS — chamado pelo botão Rolar
+// grupo A: compara a rolagem com a meta fixa da missao_obj
+async function verificarDados() {
+    const dinamico = (await client.query(
+        `SELECT id_dinamico, missao_id, ordem_atual FROM obj_dinamico
+         WHERE personagem_id = 1 AND status = 'ativa'`
+    )).rows[0];
+    if (!dinamico) return { ok: false, motivo: 'nenhuma missao ativa' };
+
+    const obj = (await client.query(
+        'SELECT tipo, alvo, modo, meta FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
+        [dinamico.missao_id, dinamico.ordem_atual]
+    )).rows[0];
+    if (!obj || obj.tipo !== 'dados') return { ok: false, motivo: 'objetivo atual nao e dados' };
+
+    const rolagem = Math.floor(Math.random() * obj.alvo) + 1;   // 1 até o tamanho do dado
+
+    let acertou;
+    if (obj.modo === 'fixo')        acertou = rolagem === obj.meta;
+    else if (obj.modo === 'minimo') acertou = rolagem >= obj.meta;
+    else if (obj.modo === 'maximo') acertou = rolagem <= obj.meta;
+    else return { ok: false, motivo: 'modo ' + obj.modo + ' ainda nao implementado' };
+
+    let missao = null;
+    if (acertou) {
+        missao = await avancar(dinamico.id_dinamico, dinamico.missao_id, dinamico.ordem_atual);
+    }
+    // errou: não grava nada, o jogador rola de novo
+
+    return { ok: true, dado: obj.alvo, modo: obj.modo, meta: obj.meta, rolagem, acertou, missao };
+}
+module.exports = { avancar, verificarCombate, invocarSeNecessario, verificarIrAte, objetivoAtivoEhInvocar, verificarDados, prepararEsperar, verificarEsperar, quebrarEsperar, prepararPerda, verificarPerda };

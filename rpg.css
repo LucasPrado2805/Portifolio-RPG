@@ -118,3 +118,8 @@ body { font-family: sans-serif; text-align: center; padding: 20px; background: #
 }
 #painel-combate h2 { margin: 0 0 8px 0; font-size: 18px; }
 #painel-combate p { margin: 0 0 10px 0; font-size: 14px; }
+
+.btn-menu:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}

@@ -2,8 +2,7 @@ const express = require('express');
 const router = express.Router();
 const client = require('../database');
 const estado = require('../estado');
-const { avancar, invocarSeNecessario } = require('../missoes_logica');
-
+const { avancar, invocarSeNecessario, verificarDados, prepararEsperar, prepararPerda } = require('../missoes_logica');
 // VER MISSÃO — gasta 1 movimento, rola d4, sorteia missão da cidade
 router.get('/ver-missao', async (req, res) => {
     if (estado.combateAtual) {
@@ -35,8 +34,14 @@ router.get('/ver-missao', async (req, res) => {
     if (!missao) {
         return res.json({ ok: true, d4, missao: null });
     }
+ // a missão começa com perda? então é um evento: acontece sem perguntar
+    const primeiro = (await client.query(
+        'SELECT tipo FROM missao_obj WHERE missao_id = $1 AND ordem = 1',
+        [missao.id_missao]
+    )).rows[0];
+    const evento = !!primeiro && primeiro.tipo === 'perda';
 
-    res.json({ ok: true, d4, missao });
+    res.json({ ok: true, d4, missao, evento });
 });
 
 // ACEITAR MISSÃO
@@ -60,10 +65,11 @@ router.get('/aceitar-missao/:id', async (req, res) => {
     );
 
     await invocarSeNecessario(idMissao, 1); // se o 1º objetivo já for boss invocado, ele cai agora
+    await prepararEsperar(idMissao, 1);
+    const missao = await prepararPerda(idMissao, 1);   // se o 1º objetivo for perda, tenta cobrar agora
 
-    res.json({ ok: true, combate: estado.combateAtual });
+    res.json({ ok: true, missao, combate: estado.combateAtual });
 });
-
 // VERIFICAR — checa o objetivo da vez (ir_ate, no encerrar)
 router.get('/verificar-missoes', async (req, res) => {
     const heroi = (await client.query(
@@ -101,6 +107,31 @@ router.get('/verificar-missoes', async (req, res) => {
     }
 
     res.json({ ok: true, resultados });
+});
+// ROLAR DADO — objetivo de dados ativo
+router.get('/rolar-dado', async (req, res) => {
+    if (estado.combateAtual) return res.json({ ok: false, motivo: 'em combate' });
+
+    const r = await verificarDados();
+    res.json({ ...r, combate: estado.combateAtual });   // se o avançar invocou um boss, o front abre o painel
+});
+
+// OBJETIVO ATIVO — o front usa pra saber quais botões liberar
+router.get('/objetivo-ativo', async (req, res) => {
+    const dinamico = (await client.query(
+        `SELECT missao_id, ordem_atual FROM obj_dinamico
+         WHERE personagem_id = 1 AND status = 'ativa'`
+    )).rows[0];
+
+    let objetivo = null;
+    if (dinamico) {
+        objetivo = (await client.query(
+            'SELECT tipo, alvo, modo, meta FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
+            [dinamico.missao_id, dinamico.ordem_atual]
+        )).rows[0] || null;
+    }
+
+    res.json({ objetivo, emCombate: !!estado.combateAtual });
 });
 
 module.exports = router;
