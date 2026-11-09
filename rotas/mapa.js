@@ -2,7 +2,8 @@ const estado = require('../estado');
 const express = require('express');
 const router = express.Router();
 const client = require('../database');
-const { verificarIrAte, objetivoAtivoEhInvocar, verificarEsperar, quebrarEsperar, verificarPerda } = require('../missoes_logica');const DIRECOES = {
+const { buscarObjetivoAtivo, verificarIrAte, objetivoAtivoEhInvocar, verificarEsperar, quebrarEsperar } = require('../missoes_logica');
+const DIRECOES = {
     leste:     { dx: 1,  dy: 0 },
     oeste:     { dx: -1, dy: 0 },
     sudeste:   { dx: 0,  dy: 1 },
@@ -100,13 +101,15 @@ router.get('/encerrar', async (req, res) => {
         else if (heroi.andou_no_turno) cura = 5;
         else cura = 10;
     }
+    // busca o objetivo ativo UMA vez, para todas as verificações
+    const ativo = await buscarObjetivoAtivo();
 
     // 2. verifica missão primeiro (completa ir_ate, pode invocar boss)
-    const missao = await verificarIrAte();
+    const missao = await verificarIrAte(ativo);
 
     // 3. carta: só fora de cidade, sem combate ativo e sem invocar pendente
     let encontro = null;
-    const ehInvocar = await objetivoAtivoEhInvocar();
+    const ehInvocar = objetivoAtivoEhInvocar(ativo);
 
     if (!cidade && !estado.combateAtual && !ehInvocar) {
         const casa = (await client.query(
@@ -153,12 +156,9 @@ router.get('/encerrar', async (req, res) => {
     );
 
     // 5. esperar: confere DEPOIS do turno subir
-    const missaoEspera = await verificarEsperar();
+    const missaoEspera = await verificarEsperar(ativo);
 
-    // 6. perda: se faltou dinheiro antes, tenta cobrar de novo
-    const missaoPerda = await verificarPerda();
-
-    res.json({ ok: true, cura, d6, encontro, missao: missao || missaoEspera || missaoPerda, combate: estado.combateAtual });
+    res.json({ ok: true, cura, d6, encontro, missao: missao || missaoEspera, combate: estado.combateAtual });
 });
 
 router.get('/gerar-mapa/:largura/:altura', async (req, res) => {

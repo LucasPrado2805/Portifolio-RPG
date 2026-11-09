@@ -1,6 +1,25 @@
 const client = require('./database');
 const estado = require('./estado');
 
+// BUSCAR OBJETIVO ATIVO — junta a missão ativa e o objetivo atual num objeto só
+async function buscarObjetivoAtivo() {
+    const dinamico = (await client.query(
+        `SELECT id_dinamico, missao_id, ordem_atual, turno_meta FROM obj_dinamico
+         WHERE personagem_id = 1 AND status = 'ativa'`
+    )).rows[0];
+
+    if (!dinamico) return null;   // sem missão ativa
+
+    const obj = (await client.query(
+        'SELECT tipo, modo, alvo, meta FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
+        [dinamico.missao_id, dinamico.ordem_atual]
+    )).rows[0];
+
+    if (!obj) return null;
+
+    return { ...dinamico, ...obj };   // ex: { id_dinamico, missao_id, ordem_atual, turno_meta, tipo, modo, alvo, meta }
+}
+
 // AVANÇAR — sobe o ordem_atual; se acabou, conclui e paga
 async function avancar(idDinamico, idMissao, ordemAtual) {
     const novaOrdem = ordemAtual + 1;
@@ -136,59 +155,35 @@ async function verificarCombate(idMorto) {
 }
 
 // VERIFICAR IR_ATE — chamado no encerrar; se o objetivo ativo é ir_ate e o herói chegou, avança
-async function verificarIrAte() {
+async function verificarIrAte(ativo) {
+    if (!ativo || ativo.tipo !== 'ir_ate') return null;
+
     const heroi = (await client.query(
         'SELECT x, y FROM personagem WHERE id_personagem = 1'
     )).rows[0];
 
-    const dinamico = (await client.query(
-        `SELECT id_dinamico, missao_id, ordem_atual FROM obj_dinamico
-         WHERE personagem_id = 1 AND status = 'ativa'`
-    )).rows[0];
-
-    if (!dinamico) return null;
-
-    const obj = (await client.query(
-        'SELECT tipo, alvo FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
-        [dinamico.missao_id, dinamico.ordem_atual]
-    )).rows[0];
-
-    if (!obj || obj.tipo !== 'ir_ate') return null;
-
     const destino = (await client.query(
         'SELECT x, y FROM posicoes WHERE id_posicao = $1',
-        [obj.alvo]
+        [ativo.alvo]
     )).rows[0];
 
     if (destino && heroi.x === destino.x && heroi.y === destino.y) {
-        return await avancar(dinamico.id_dinamico, dinamico.missao_id, dinamico.ordem_atual);
+        return await avancar(ativo.id_dinamico, ativo.missao_id, ativo.ordem_atual);
     }
     return null;
 }
 
-// VERIFICAR ESPERAR — chamado no encerrar; se o turno chegou na meta, avança
-async function verificarEsperar() {
-    const dinamico = (await client.query(
-        `SELECT id_dinamico, missao_id, ordem_atual, turno_meta FROM obj_dinamico
-         WHERE personagem_id = 1 AND status = 'ativa'`
-    )).rows[0];
-
-    if (!dinamico) return null;
-
-    const obj = (await client.query(
-        'SELECT tipo FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
-        [dinamico.missao_id, dinamico.ordem_atual]
-    )).rows[0];
-
-    if (!obj || obj.tipo !== 'esperar') return null;
-    if (dinamico.turno_meta === null) return null;   // meta não foi gravada; não avança
+// VERIFICAR ESPERAR — recebe o objetivo ativo; se o turno chegou na meta, avança
+async function verificarEsperar(ativo) {
+    if (!ativo || ativo.tipo !== 'esperar') return null;
+    if (ativo.turno_meta === null) return null;   // meta não foi gravada; não avança
 
     const heroi = (await client.query(
         'SELECT turno_atual FROM personagem WHERE id_personagem = 1'
     )).rows[0];
 
-    if (heroi.turno_atual >= dinamico.turno_meta) {
-        return await avancar(dinamico.id_dinamico, dinamico.missao_id, dinamico.ordem_atual);
+    if (heroi.turno_atual >= ativo.turno_meta) {
+        return await avancar(ativo.id_dinamico, ativo.missao_id, ativo.ordem_atual);
     }
     return null;   // ainda não chegou, espera mais
 }
@@ -229,20 +224,8 @@ async function quebrarEsperar() {
 }
 
 // O objetivo ativo é um combate invocar? (pra silenciar a carta do bioma)
-async function objetivoAtivoEhInvocar() {
-    const dinamico = (await client.query(
-        `SELECT missao_id, ordem_atual FROM obj_dinamico
-         WHERE personagem_id = 1 AND status = 'ativa'`
-    )).rows[0];
-
-    if (!dinamico) return false;
-
-    const obj = (await client.query(
-        'SELECT tipo, modo FROM missao_obj WHERE missao_id = $1 AND ordem = $2',
-        [dinamico.missao_id, dinamico.ordem_atual]
-    )).rows[0];
-
-    return obj && obj.tipo === 'combate' && obj.modo === 'invocar';
+function objetivoAtivoEhInvocar(ativo) {
+    return !!ativo && ativo.tipo === 'combate' && ativo.modo === 'invocar';
 }
 
 // VERIFICAR DADOS — chamado pelo botão Rolar
@@ -276,4 +259,4 @@ async function verificarDados() {
 
     return { ok: true, dado: obj.alvo, modo: obj.modo, meta: obj.meta, rolagem, acertou, missao };
 }
-module.exports = { avancar, verificarCombate, invocarSeNecessario, verificarIrAte, objetivoAtivoEhInvocar, verificarDados, prepararEsperar, verificarEsperar, quebrarEsperar, prepararPerda, verificarPerda };
+module.exports = { buscarObjetivoAtivo, avancar, verificarCombate, invocarSeNecessario, verificarIrAte, objetivoAtivoEhInvocar, verificarDados, prepararEsperar, verificarEsperar, quebrarEsperar, prepararPerda, verificarPerda };
