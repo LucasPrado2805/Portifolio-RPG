@@ -259,4 +259,16 @@ async function verificarDados() {
 
     return { ok: true, dado: obj.alvo, modo: obj.modo, meta: obj.meta, rolagem, acertou, missao };
 }
-module.exports = { buscarObjetivoAtivo, avancar, verificarCombate, invocarSeNecessario, verificarIrAte, objetivoAtivoEhInvocar, verificarDados, prepararEsperar, verificarEsperar, quebrarEsperar, prepararPerda, verificarPerda };
+// AO LIGAR O SERVIDOR — se a missão ativa estava num boss, o boss sumiu da memória: perde a missão
+async function perderMissaoDeBossSumido() {
+    const ativo = await buscarObjetivoAtivo();
+    if (!objetivoAtivoEhInvocar(ativo)) return;   // não estava num boss, nada a fazer
+
+    await client.query(
+        `UPDATE obj_dinamico SET status = 'perdida' WHERE id_dinamico = $1`,
+        [ativo.id_dinamico]
+    );
+    console.log('Missão ' + ativo.missao_id + ' perdida: o servidor reiniciou durante o boss.');
+}
+
+module.exports = { perderMissaoDeBossSumido, buscarObjetivoAtivo, avancar, verificarCombate, invocarSeNecessario, verificarIrAte, objetivoAtivoEhInvocar, verificarDados, prepararEsperar, verificarEsperar, quebrarEsperar, prepararPerda, verificarPerda };
